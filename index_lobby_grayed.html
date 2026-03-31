@@ -1,0 +1,2570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simple RTS Country Battle - Custom World Map</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <style>
+    .leaflet-control-container { display: none !important; }
+    .leaflet-control-attribution { display: none !important; }
+
+    body {
+      margin: 0;
+      background: #111827;
+      color: white;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    h1, p {
+      display: none;
+      margin: 0;
+    }
+
+    #map {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      border: 0;
+      border-radius: 0;
+      overflow: hidden;
+      margin: 0;
+      z-index: 1;
+    }
+
+    .leaflet-container {
+      background:
+        radial-gradient(circle at 30% 20%, rgba(59,130,246,0.18), transparent 28%),
+        radial-gradient(circle at 70% 75%, rgba(34,197,94,0.10), transparent 24%),
+        linear-gradient(180deg, #0b1220 0%, #0f172a 50%, #111827 100%);
+    }
+
+    .map-overlay-grid {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2;
+      background-image:
+        linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+      background-size: 120px 120px;
+      mask-image: linear-gradient(rgba(255,255,255,0.6), rgba(255,255,255,0.25));
+    }
+
+    .province-tooltip {
+      background: rgba(15, 23, 42, 0.92);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 8px;
+      padding: 4px 7px;
+      font-size: 12px;
+      font-weight: 600;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.18);
+      white-space: nowrap;
+    }
+
+    .leaflet-tooltip.province-tooltip:before {
+      display: none;
+    }
+
+    .country-context-menu {
+      position: fixed;
+      min-width: 220px;
+      background: rgba(15, 23, 42, 0.96);
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      border-radius: 12px;
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35);
+      padding: 10px;
+      z-index: 1300;
+      display: none;
+      backdrop-filter: blur(8px);
+    }
+
+    .country-context-menu-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 8px;
+    }
+
+    .country-context-menu-subtitle {
+      font-size: 12px;
+      color: #cbd5e1;
+      margin-bottom: 10px;
+    }
+
+    .country-context-menu button {
+      width: 100%;
+      background: #0b1220;
+      color: white;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 13px;
+      cursor: pointer;
+      margin-top: 6px;
+    }
+
+    .resource-panel {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      z-index: 950;
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(51, 65, 85, 0.95);
+      border-radius: 14px;
+      padding: 10px 14px;
+      color: #e2e8f0;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+    }
+
+    .top-bar-actions {
+      position: fixed;
+      top: 14px;
+      right: 220px;
+      z-index: 960;
+      display: flex;
+      gap: 8px;
+    }
+
+    .top-bar-actions button {
+      background: #0b1220;
+      color: white;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .resource-pill {
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .help {
+      position: fixed;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #cbd5e1;
+      font-size: 13px;
+      text-align: center;
+      padding: 8px 12px;
+      background: rgba(15, 23, 42, 0.82);
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      border-radius: 12px;
+      z-index: 900;
+      backdrop-filter: blur(6px);
+      max-width: min(920px, calc(100vw - 180px));
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .selection-help {
+      position: fixed;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #cbd5e1;
+      font-size: 13px;
+      text-align: center;
+      padding: 8px 12px;
+      margin: 0;
+      background: rgba(15, 23, 42, 0.82);
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      border-radius: 12px;
+      z-index: 900;
+      backdrop-filter: blur(6px);
+    }
+
+    .controls {
+      position: fixed;
+      top: 14px;
+      right: 14px;
+      display: flex;
+      justify-content: flex-end;
+      z-index: 950;
+    }
+
+    .control-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(51, 65, 85, 0.95);
+      border-radius: 14px;
+      padding: 10px 14px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+      color: #e2e8f0;
+      flex-wrap: nowrap;
+      justify-content: center;
+      backdrop-filter: blur(8px);
+    }
+
+    .control-card label {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .control-card input[type="range"] {
+      width: 180px;
+    }
+
+    .control-card select {
+      background: #0b1220;
+      color: white;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 6px 8px;
+      font-size: 13px;
+    }
+
+    .slider-value {
+      min-width: 48px;
+      text-align: center;
+      font-weight: 700;
+      color: white;
+    }
+
+    .province-token {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 11px;
+      font-weight: bold;
+      border-radius: 999px;
+      box-sizing: border-box;
+      user-select: none;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .selection-box {
+      position: fixed;
+      border: 2px dashed #facc15;
+      background: rgba(250, 204, 21, 0.12);
+      pointer-events: none;
+      z-index: 1000;
+      display: none;
+    }
+
+    .build-menu {
+      position: fixed;
+      right: 14px;
+      bottom: 60px;
+      z-index: 980;
+      width: 280px;
+      background: rgba(15, 23, 42, 0.94);
+      border: 1px solid rgba(51, 65, 85, 0.95);
+      border-radius: 14px;
+      padding: 12px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(8px);
+    }
+
+    .build-menu-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 6px;
+    }
+
+    .build-menu-subtitle {
+      font-size: 12px;
+      color: #cbd5e1;
+      margin-bottom: 10px;
+      line-height: 1.4;
+    }
+
+    .build-menu-buttons {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    .build-menu-buttons button {
+      width: 100%;
+      background: #0b1220;
+      color: white;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 9px 10px;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .build-menu-buttons button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .diplomacy-menu {
+      position: fixed;
+      left: 14px;
+      bottom: 60px;
+      z-index: 980;
+      width: 320px;
+      background: rgba(15, 23, 42, 0.94);
+      border: 1px solid rgba(51, 65, 85, 0.95);
+      border-radius: 14px;
+      padding: 12px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(8px);
+    }
+
+    .diplomacy-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 6px;
+    }
+
+    .diplomacy-subtitle {
+      font-size: 12px;
+      color: #cbd5e1;
+      margin-bottom: 10px;
+      line-height: 1.4;
+    }
+
+    .diplomacy-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 12px;
+      color: #cbd5e1;
+      margin-bottom: 8px;
+    }
+
+    .diplomacy-buttons {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    .diplomacy-buttons button {
+      width: 100%;
+      background: #0b1220;
+      color: white;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 9px 10px;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .diplomacy-buttons button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .start-menu-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 3000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.18), transparent 24%), radial-gradient(circle at 80% 70%, rgba(34, 197, 94, 0.12), transparent 22%), rgba(2, 6, 23, 0.82);
+      backdrop-filter: blur(10px);
+    }
+
+    .start-menu-card {
+      width: min(920px, calc(100vw - 40px));
+      background: rgba(15, 23, 42, 0.96);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 22px;
+      padding: 24px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
+    }
+
+    .start-menu-title {
+      font-size: 34px;
+      font-weight: 800;
+      color: white;
+      margin-bottom: 8px;
+    }
+
+    .start-menu-subtitle {
+      font-size: 14px;
+      color: #cbd5e1;
+      margin-bottom: 18px;
+      line-height: 1.5;
+    }
+
+    .start-menu-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .start-menu-option {
+      background: rgba(11, 18, 32, 0.96);
+      border: 1px solid rgba(71, 85, 105, 0.9);
+      border-radius: 18px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 220px;
+    }
+
+    .start-menu-option h2 {
+      margin: 0;
+      font-size: 20px;
+      color: white;
+    }
+
+    .start-menu-option p {
+      display: block;
+      margin: 0;
+      color: #cbd5e1;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .start-menu-option button {
+      margin-top: auto;
+      background: #1d4ed8;
+      color: white;
+      border: 1px solid rgba(96, 165, 250, 0.45);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .start-menu-option button.secondary {
+      background: #0b1220;
+      border-color: #334155;
+    }
+
+    .start-menu-option button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .start-menu-option.disabled {
+      opacity: 0.5;
+      filter: grayscale(0.45);
+    }
+
+    .start-menu-option.disabled button {
+      cursor: not-allowed;
+    }
+
+    .start-menu-list {
+      margin: 0;
+      padding-left: 18px;
+      color: #cbd5e1;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .start-menu-status {
+      margin-top: 16px;
+      color: #93c5fd;
+      font-size: 13px;
+      min-height: 18px;
+    }
+
+    .start-menu-input {
+      width: 100%;
+      background: #020617;
+      color: white;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+
+    .username-badge {
+      position: fixed;
+      top: 60px;
+      right: 14px;
+      z-index: 960;
+      background: rgba(15, 23, 42, 0.94);
+      border: 1px solid rgba(51, 65, 85, 0.95);
+      border-radius: 14px;
+      padding: 8px 12px;
+      color: #e2e8f0;
+      font-size: 13px;
+      font-weight: 700;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+      display: none;
+    }
+
+    @media (max-width: 860px) {
+      .start-menu-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Simple RTS Country Battle - Custom World Map</h1>
+  <p>World RTS map. Click one of your provinces, then click another province to send troops.</p>
+  <div class="help">Custom world map • Blue player • Red enemy • Gray neutral • Green ally • Purple rival • Orange rebels</div>
+  <div class="resource-panel">
+    <div id="gold-display" class="resource-pill">💰 Gold: 0</div>
+    <div id="income-display" class="resource-pill">📈 Income: 0/tick</div>
+  </div>
+  <div class="top-bar-actions">
+    <button id="back-to-menu-button" type="button">Exit to Menu</button>
+  </div>
+
+  <div class="controls">
+    <div class="control-card">
+      <label for="difficulty-select">Difficulty</label>
+      <select id="difficulty-select">
+        <option value="easy">Easy</option>
+        <option value="normal" selected>Normal</option>
+        <option value="hard">Hard</option>
+        <option value="brutal">Brutal</option>
+      </select>
+      <label for="send-percent">Send</label>
+      <input id="send-percent" type="range" min="10" max="100" step="5" value="50" />
+      <div id="send-percent-value" class="slider-value">50%</div>
+    </div>
+  </div>
+  <div class="selection-help">You start with one random homeland country only. Expand by conquering outward. Hold Shift to select multiple provinces and drag on empty map space to box-select.</div>
+  <div id="start-menu-overlay" class="start-menu-overlay">
+    <div class="start-menu-card">
+      <div class="start-menu-title">World RTS</div>
+      <div class="start-menu-subtitle">Choose how you want to play. Single player starts instantly. The lobby browser is a front-end menu only in this build, so it cannot connect to real online servers yet.</div>
+      <div class="start-menu-grid">
+        <div class="start-menu-option">
+          <h2>Single Player</h2>
+          <input id="username-input" class="start-menu-input" type="text" maxlength="18" placeholder="Enter username" value="Player 1" />
+          <p>Play against AI nations on the full world map. Your country starts random and expands by conquest, diplomacy, and upgrades.</p>
+          <ul class="start-menu-list">
+            <li>Instant start</li>
+            <li>AI diplomacy and wars</li>
+            <li>No other players needed</li>
+          </ul>
+          <button id="start-singleplayer-button" type="button">Play Single Player</button>
+        </div>
+        <div class="start-menu-option disabled">
+          <h2>Search Lobbies</h2>
+          <p>Coming soon.</p>
+          <ul class="start-menu-list">
+            <li>Multiplayer coming soon</li>
+          </ul>
+          <button class="secondary" type="button" disabled>Coming Soon</button>
+        </div>
+        <div class="start-menu-option disabled">
+          <h2>Lobby Tools</h2>
+          <p>Coming soon.</p>
+          <ul class="start-menu-list">
+            <li>Multiplayer coming soon</li>
+          </ul>
+          <button class="secondary" type="button" disabled>Coming Soon</button>
+          <button class="secondary" type="button" disabled>Coming Soon</button>
+        </div>
+      </div>
+      <div id="start-menu-status" class="start-menu-status"></div>
+    </div>
+  </div>
+  <div id="username-badge" class="username-badge">👤 Player 1</div>
+  <div id="map"></div>
+  <div class="map-overlay-grid"></div>
+  <div id="selection-box" class="selection-box"></div>
+  <div id="country-context-menu" class="country-context-menu">
+    <div id="country-context-menu-title" class="country-context-menu-title"></div>
+    <div id="country-context-menu-subtitle" class="country-context-menu-subtitle"></div>
+    <button id="country-context-menu-ally" type="button">Offer Alliance</button>
+    <button id="country-context-menu-factory" type="button">Build Factory</button>
+    <button id="country-context-menu-city" type="button">Build City</button>
+    <button id="country-context-menu-port" type="button">Build Port</button>
+  </div>
+  <div id="build-menu" class="build-menu">
+    <div id="build-menu-title" class="build-menu-title">Build Menu</div>
+    <div id="build-menu-subtitle" class="build-menu-subtitle">Select one of your provinces to build factories, cities, or ports.</div>
+    <div class="build-menu-buttons">
+      <button id="build-menu-factory" type="button">🏭 Build Factory (70)</button>
+      <button id="build-menu-city" type="button">🏙️ Build City (110)</button>
+      <button id="build-menu-port" type="button">⚓ Build Port (90)</button>
+    </div>
+  </div>
+  <div id="diplomacy-menu" class="diplomacy-menu">
+    <div id="diplomacy-title" class="diplomacy-title">Diplomacy</div>
+    <div id="diplomacy-subtitle" class="diplomacy-subtitle">Click another country to open diplomacy. Build trust before asking for an alliance.</div>
+    <div class="diplomacy-row"><span>Relations</span><span id="diplomacy-relations">—</span></div>
+    <div class="diplomacy-row"><span>Status</span><span id="diplomacy-status">—</span></div>
+    <div class="diplomacy-row"><span>Strength</span><span id="diplomacy-strength">—</span></div>
+    <div class="diplomacy-buttons">
+      <button id="diplomacy-improve" type="button">🤝 Improve Relations (30 gold)</button>
+      <button id="diplomacy-alliance" type="button">🕊️ Offer Alliance</button>
+    </div>
+  </div>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script>
+    const GROWTH_TIME = 1200;
+    const AI_TIME = 1800;
+    const COUNTRY_GEOJSON_URL = 'https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson';
+    const UNIT_SPEED_METERS_PER_FRAME = 90000;
+    const LONG_RANGE_PORT_DISTANCE = 1200000;
+    const FACTORY_COST = 70;
+    const CITY_COST = 110;
+    const PORT_COST = 90;
+
+    const DIFFICULTY_CONFIG = {
+      easy: { aiGrowthBonus: 0, aiAttackMinTroops: 11, aiAttackInterval: 2600, aiSendBonus: 0.9, extraAiCountries: 10, playerGrowthBonus: 1 },
+      normal: { aiGrowthBonus: 1, aiAttackMinTroops: 9, aiAttackInterval: 1800, aiSendBonus: 1.0, extraAiCountries: 22, playerGrowthBonus: 0 },
+      hard: { aiGrowthBonus: 2, aiAttackMinTroops: 7, aiAttackInterval: 1200, aiSendBonus: 1.15, extraAiCountries: 36, playerGrowthBonus: 0 },
+      brutal: { aiGrowthBonus: 3, aiAttackMinTroops: 6, aiAttackInterval: 800, aiSendBonus: 1.3, extraAiCountries: 52, playerGrowthBonus: 0 }
+    };
+
+    const TEAM_STYLES = {
+      player: { fill: '#3b82f6', border: '#93c5fd', label: 'Player', flag: '🏴' },
+      enemy: { fill: '#ef4444', border: '#fca5a5', label: 'Enemy', flag: '⚔️' },
+      neutral: { fill: '#94a3b8', border: '#cbd5e1', label: 'Neutral', flag: '🏳️' },
+      ally: { fill: '#22c55e', border: '#86efac', label: 'Ally', flag: '🤝' },
+      rival: { fill: '#a855f7', border: '#d8b4fe', label: 'Rival', flag: '🟣' },
+      rebels: { fill: '#f59e0b', border: '#fcd34d', label: 'Rebels', flag: '🔥' }
+    };
+
+    const COUNTRY_FLAGS = {
+      'Poland': '🇵🇱', 'Germany': '🇩🇪', 'France': '🇫🇷', 'United Kingdom': '🇬🇧', 'Spain': '🇪🇸', 'Italy': '🇮🇹', 'Canada': '🇨🇦',
+      'Australia': '🇦🇺', 'Japan': '🇯🇵', 'Sweden': '🇸🇪', 'Norway': '🇳🇴', 'Russia': '🇷🇺', 'China': '🇨🇳', 'Iran': '🇮🇷',
+      'Belarus': '🇧🇾', 'North Korea': '🇰🇵', 'Kazakhstan': '🇰🇿', 'Myanmar': '🇲🇲', 'India': '🇮🇳', 'Brazil': '🇧🇷',
+      'Turkey': '🇹🇷', 'South Africa': '🇿🇦', 'Mexico': '🇲🇽', 'Pakistan': '🇵🇰', 'Argentina': '🇦🇷', 'Afghanistan': '🇦🇫',
+      'Syria': '🇸🇾', 'Libya': '🇱🇾', 'Yemen': '🇾🇪', 'Somalia': '🇸🇴', 'Sudan': '🇸🇩', 'United States of America': '🇺🇸',
+      'United States': '🇺🇸', 'Ukraine': '🇺🇦', 'South Korea': '🇰🇷', 'Indonesia': '🇮🇩', 'Vietnam': '🇻🇳', 'Thailand': '🇹🇭',
+      'Philippines': '🇵🇭', 'Egypt': '🇪🇬', 'Algeria': '🇩🇿', 'Nigeria': '🇳🇬', 'Ethiopia': '🇪🇹', 'Kenya': '🇰🇪',
+      'Saudi Arabia': '🇸🇦', 'Iraq': '🇮🇶', 'Mongolia': '🇲🇳', 'Uzbekistan': '🇺🇿', 'Turkmenistan': '🇹🇲', 'Venezuela': '🇻🇪',
+      'Colombia': '🇨🇴', 'Peru': '🇵🇪', 'Chile': '🇨🇱', 'Bolivia': '🇧🇴', 'Paraguay': '🇵🇾', 'Uruguay': '🇺🇾', 'Finland': '🇫🇮',
+      'Romania': '🇷🇴', 'Greece': '🇬🇷', 'Czechia': '🇨🇿', 'Czech Republic': '🇨🇿', 'Hungary': '🇭🇺', 'Austria': '🇦🇹',
+      'Netherlands': '🇳🇱', 'Belgium': '🇧🇪', 'Portugal': '🇵🇹', 'Morocco': '🇲🇦', 'Tunisia': '🇹🇳', 'Niger': '🇳🇪',
+      'Mali': '🇲🇱', 'Chad': '🇹🇩', 'Cameroon': '🇨🇲', 'Tanzania': '🇹🇿', 'Madagascar': '🇲🇬', 'Mozambique': '🇲🇿',
+      'Zambia': '🇿🇲', 'Zimbabwe': '🇿🇼', 'Botswana': '🇧🇼', 'Namibia': '🇳🇦', 'Oman': '🇴🇲', 'United Arab Emirates': '🇦🇪'
+    };
+
+    const BASE_STARTING_FACTIONS = {
+      player: [],
+      ally: ['Spain', 'Italy', 'Canada', 'Australia', 'Japan', 'Sweden', 'Norway'],
+      enemy: ['Russia', 'China', 'Iran', 'Belarus', 'North Korea', 'Kazakhstan', 'Myanmar'],
+      rival: ['India', 'Brazil', 'Turkey', 'South Africa', 'Mexico', 'Pakistan', 'Argentina'],
+      rebels: ['Afghanistan', 'Syria', 'Libya', 'Yemen', 'Somalia', 'Sudan']
+    };
+
+    const AI_EXPANSION_POOL = [
+      'United States of America', 'United States', 'Ukraine', 'Japan', 'South Korea', 'Indonesia', 'Vietnam', 'Thailand', 'Philippines',
+      'Egypt', 'Algeria', 'Nigeria', 'Ethiopia', 'Kenya', 'Angola', 'Democratic Republic of the Congo', 'Saudi Arabia', 'Iraq', 'Mongolia',
+      'Uzbekistan', 'Turkmenistan', 'Venezuela', 'Colombia', 'Peru', 'Chile', 'Bolivia', 'Paraguay', 'Uruguay', 'Finland', 'Romania',
+      'Greece', 'Czechia', 'Czech Republic', 'Hungary', 'Austria', 'Netherlands', 'Belgium', 'Portugal', 'Morocco', 'Tunisia', 'Niger',
+      'Mali', 'Chad', 'Cameroon', 'Tanzania', 'Madagascar', 'Mozambique', 'Zambia', 'Zimbabwe', 'Botswana', 'Namibia', 'Oman', 'United Arab Emirates'
+    ];
+
+    const FALLBACK_FEATURES = [
+      { properties: { ADMIN: 'Germany' }, geometry: { type: 'Polygon', coordinates: [[[6, 47], [15, 47], [15, 55], [6, 55], [6, 47]]] } },
+      { properties: { ADMIN: 'Poland' }, geometry: { type: 'Polygon', coordinates: [[[14, 49], [24, 49], [24, 55], [14, 55], [14, 49]]] } },
+      { properties: { ADMIN: 'France' }, geometry: { type: 'Polygon', coordinates: [[[-5, 43], [8, 43], [8, 51], [-5, 51], [-5, 43]]] } },
+      { properties: { ADMIN: 'Russia' }, geometry: { type: 'Polygon', coordinates: [[[30, 45], [180, 45], [180, 72], [30, 72], [30, 45]]] } },
+      { properties: { ADMIN: 'China' }, geometry: { type: 'Polygon', coordinates: [[[73, 18], [135, 18], [135, 54], [73, 54], [73, 18]]] } }
+    ];
+
+    const map = L.map('map', {
+      zoomControl: false,
+      minZoom: 2,
+      maxZoom: 7,
+      worldCopyJump: false,
+      maxBounds: [[-85, -180], [85, 180]],
+      maxBoundsViscosity: 1,
+      preferCanvas: true
+    }).setView([20, 0], 2);
+
+    map.fitBounds([[-60, -180], [85, 180]]);
+
+    let worldCountries = [];
+    let provinces = [];
+    const countryLayers = new Map();
+    const provinceLayers = new Map();
+    const unitLayers = [];
+    const arrowLayers = [];
+    const units = [];
+    let selectedProvince = null;
+    let selectedProvinces = [];
+    let worldReady = false;
+    let sendPercentage = 50;
+    let selectedDifficulty = 'normal';
+    let difficultyState = DIFFICULTY_CONFIG.normal;
+    let currentStartingFactions = null;
+    let currentPlayerStartCountry = '';
+    let lastAiActionAt = 0;
+    let gameOver = false;
+    let boxSelectState = null;
+    let allianceRequests = new Set();
+    let loyalAllianceCountries = new Set();
+    let contextMenuCountryName = '';
+    let contextMenuProvinceId = '';
+    let playerGold = 140;
+    let buildMenuProvinceId = '';
+    let balancedAiAssignments = new Map();
+    let diplomacyCountryName = '';
+    let countryRelations = new Map();
+    let allianceCooldowns = new Map();
+    let aiThreat = new Map();
+    let lastPlayerAggressionAt = 0;
+    let gameStarted = false;
+    let playerUsername = 'Player 1';
+
+    function getColor(owner) {
+      return (TEAM_STYLES[owner] || TEAM_STYLES.neutral).fill;
+    }
+
+    function getBorderColor(owner) {
+      return (TEAM_STYLES[owner] || TEAM_STYLES.neutral).border;
+    }
+
+    function hashString(value) {
+      let hash = 0;
+      const text = String(value || 'nation');
+      for (let i = 0; i < text.length; i++) {
+        hash = (hash * 31 + text.charCodeAt(i)) % 3600;
+      }
+      return hash;
+    }
+
+    function getNationColor(nationId) {
+      const hue = hashString(nationId) % 360;
+      return `hsl(${hue}, 70%, 52%)`;
+    }
+
+    function getNationBorderColor(nationId) {
+      const hue = hashString(nationId) % 360;
+      return `hsl(${hue}, 75%, 72%)`;
+    }
+
+    function getNationFlag(nationName, fallbackOwner) {
+      return COUNTRY_FLAGS[nationName] || (TEAM_STYLES[fallbackOwner] || TEAM_STYLES.neutral).flag;
+    }
+
+    function teamLabel(owner) {
+      return (TEAM_STYLES[owner] || TEAM_STYLES.neutral).label;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function updateSendPercentageDisplay() {
+      const element = document.getElementById('send-percent-value');
+      if (element) {
+        element.textContent = `${sendPercentage}%`;
+      }
+    }
+
+    function sanitizeUsername(value) {
+      const cleaned = String(value || '').replace(/\s+/g, ' ').trim();
+      return cleaned.slice(0, 18) || 'Player 1';
+    }
+
+    function updateUsernameBadge() {
+      const badge = document.getElementById('username-badge');
+      if (!badge) return;
+      if (gameStarted) {
+        badge.style.display = 'block';
+        badge.textContent = `👤 ${playerUsername}`;
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
+    function setStartMenuStatus(message) {
+      const element = document.getElementById('start-menu-status');
+      if (element) {
+        element.textContent = message;
+      }
+    }
+
+    function hideStartMenu() {
+      const overlay = document.getElementById('start-menu-overlay');
+      if (overlay) {
+        overlay.style.display = 'none';
+      }
+      gameStarted = true;
+      updateUsernameBadge();
+    }
+
+    function showStartMenu() {
+      const overlay = document.getElementById('start-menu-overlay');
+      if (overlay) {
+        overlay.style.display = 'flex';
+      }
+      gameStarted = false;
+      updateUsernameBadge();
+    }
+
+    function exitToMenu() {
+      units.length = 0;
+      clearUnits();
+      clearSelection();
+      clearDiplomacySelection();
+      worldReady = false;
+      gameOver = false;
+      showStartMenu();
+      setStartMenuStatus('Returned to menu. Choose a mode to play again.');
+    }
+
+    async function startSinglePlayerGame() {
+      const usernameInput = document.getElementById('username-input');
+      playerUsername = sanitizeUsername(usernameInput ? usernameInput.value : playerUsername);
+      if (usernameInput) {
+        usernameInput.value = playerUsername;
+      }
+      hideStartMenu();
+      setStartMenuStatus('');
+      worldReady = false;
+      await loadWorld();
+      refreshHelpStatus(`${playerUsername} entered the war as ${currentPlayerStartCountry}.`);
+    }
+
+    function showOfflineLobbyMessage(message) {
+      setStartMenuStatus(message);
+    }
+
+    function buildStartingFactions() {
+      const factions = {
+        player: [...BASE_STARTING_FACTIONS.player],
+        ally: [...BASE_STARTING_FACTIONS.ally],
+        enemy: [...BASE_STARTING_FACTIONS.enemy],
+        rival: [...BASE_STARTING_FACTIONS.rival],
+        rebels: [...BASE_STARTING_FACTIONS.rebels]
+      };
+
+      const alreadyUsed = new Set(Object.values(factions).flat().map((name) => name.toLowerCase()));
+      const targetExtra = difficultyState.extraAiCountries;
+      let added = 0;
+      let cursor = 0;
+
+      while (added < targetExtra && cursor < AI_EXPANSION_POOL.length) {
+        const name = AI_EXPANSION_POOL[cursor++];
+        const normalized = name.toLowerCase();
+        if (alreadyUsed.has(normalized)) continue;
+        const bucket = added % 3 === 0 ? 'enemy' : added % 3 === 1 ? 'rival' : 'rebels';
+        factions[bucket].push(name);
+        alreadyUsed.add(normalized);
+        added += 1;
+      }
+
+      return factions;
+    }
+
+    function buildBalancedAiAssignments(features, factions, playerStartCountry) {
+      const assignments = new Map();
+      const teamWeights = { ally: 0, enemy: 0, rival: 0, rebels: 0 };
+      const aiTeams = ['enemy', 'rival', 'rebels', 'ally'];
+
+      for (const team of aiTeams) {
+        for (const countryName of factions[team] || []) {
+          const normalized = String(countryName).toLowerCase();
+          assignments.set(normalized, team);
+          teamWeights[team] += 1;
+        }
+      }
+
+      for (const feature of features) {
+        const countryName = normalizeCountryName(feature);
+        const normalized = String(countryName).toLowerCase();
+        if (!countryName || normalized === String(playerStartCountry).toLowerCase()) continue;
+        if (assignments.has(normalized)) continue;
+
+        const rings = extractOuterRings(feature.geometry);
+        const sizeScore = Math.max(1, rings.reduce((sum, ring) => sum + ringArea(ring), 0));
+        const nextTeam = aiTeams.slice().sort((a, b) => teamWeights[a] - teamWeights[b])[0];
+        assignments.set(normalized, nextTeam);
+        teamWeights[nextTeam] += sizeScore;
+      }
+
+      return assignments;
+    }
+
+    function chooseRandomPlayerStart(features) {
+      const names = features.map((feature) => normalizeCountryName(feature)).filter(Boolean);
+      if (!names.length) {
+        return 'Poland';
+      }
+      return names[Math.floor(Math.random() * names.length)];
+    }
+
+    function getRelations(countryName) {
+      return countryRelations.get(countryName) ?? 0;
+    }
+
+    function setRelations(countryName, value) {
+      countryRelations.set(countryName, Math.max(-100, Math.min(100, Math.round(value))));
+    }
+
+    function adjustRelations(countryName, delta) {
+      setRelations(countryName, getRelations(countryName) + delta);
+    }
+
+    function initializeDiplomacy(features, playerStartCountry) {
+      countryRelations = new Map();
+      allianceCooldowns = new Map();
+      aiThreat = new Map();
+      lastPlayerAggressionAt = 0;
+      for (const feature of features) {
+        const name = normalizeCountryName(feature);
+        if (!name || name === playerStartCountry) continue;
+        const owner = balancedAiAssignments.get(String(name).toLowerCase()) || 'enemy';
+        const baseRelations = owner === 'ally' ? 35 : owner === 'enemy' ? -30 : owner === 'rival' ? -10 : -18;
+        const baseThreat = owner === 'enemy' ? 18 : owner === 'rival' ? 10 : owner === 'rebels' ? 12 : 4;
+        setRelations(name, baseRelations);
+        aiThreat.set(name, baseThreat);
+      }
+      diplomacyCountryName = '';
+    }
+
+    function getStartingOwner(countryName) {
+      const normalized = String(countryName).trim().toLowerCase();
+      const factions = currentStartingFactions || buildStartingFactions();
+      for (const [owner, countries] of Object.entries(factions)) {
+        if (countries.some((name) => name.toLowerCase() === normalized)) {
+          return owner;
+        }
+      }
+      return balancedAiAssignments.get(normalized) || 'enemy';
+    }
+
+    function normalizeCountryName(feature) {
+      const props = feature.properties || {};
+      return props.ADMIN || props.name || props.NAME || props.name_long || props.SOVEREIGNT || 'Unknown';
+    }
+
+    function ringArea(ring) {
+      let area = 0;
+      for (let i = 0; i < ring.length; i++) {
+        const [x1, y1] = ring[i];
+        const [x2, y2] = ring[(i + 1) % ring.length];
+        area += x1 * y2 - x2 * y1;
+      }
+      return Math.abs(area / 2);
+    }
+
+    function extractOuterRings(geometry) {
+      if (!geometry) return [];
+      if (geometry.type === 'Polygon') {
+        return geometry.coordinates && geometry.coordinates[0] ? [geometry.coordinates[0]] : [];
+      }
+      if (geometry.type === 'MultiPolygon') {
+        return (geometry.coordinates || [])
+          .map((polygon) => polygon[0] || [])
+          .filter((ring) => ring.length >= 3);
+      }
+      return [];
+    }
+
+    function ringToLatLng(ring) {
+      return ring
+        .filter((point) => Array.isArray(point) && point.length >= 2)
+        .map(([lng, lat]) => [lat, lng]);
+    }
+
+    function ringsToLatLng(rings) {
+      return rings.map((ring) => ringToLatLng(ring)).filter((ring) => ring.length >= 3);
+    }
+
+    function getBoundsFromBorder(border) {
+      let minLat = Infinity;
+      let maxLat = -Infinity;
+      let minLng = Infinity;
+      let maxLng = -Infinity;
+
+      for (const [lat, lng] of border) {
+        minLat = Math.min(minLat, lat);
+        maxLat = Math.max(maxLat, lat);
+        minLng = Math.min(minLng, lng);
+        maxLng = Math.max(maxLng, lng);
+      }
+
+      return {
+        minLat,
+        maxLat,
+        minLng,
+        maxLng,
+        latSpan: Math.max(0.8, maxLat - minLat),
+        lngSpan: Math.max(0.8, maxLng - minLng)
+      };
+    }
+
+    function determineRegionCount(bounds) {
+      const score = bounds.latSpan * bounds.lngSpan;
+      if (score > 250) return 10;
+      if (score > 160) return 9;
+      if (score > 100) return 8;
+      if (score > 60) return 7;
+      if (score > 30) return 6;
+      if (score > 14) return 5;
+      if (score > 6) return 4;
+      return 3;
+    }
+
+    function regionNames(countryName, count) {
+      const base = ['North', 'South', 'West', 'East', 'Central', 'Capital', 'Frontier', 'Harbor', 'Highlands', 'Lowlands'];
+      return base.slice(0, count).map((name) => `${name} ${countryName}`);
+    }
+
+    function pointInPolygon(lat, lng, polygon) {
+      let inside = false;
+      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const xi = polygon[i][1];
+        const yi = polygon[i][0];
+        const xj = polygon[j][1];
+        const yj = polygon[j][0];
+        const intersects = ((yi > lat) !== (yj > lat)) && (lng < ((xj - xi) * (lat - yi)) / ((yj - yi) || Number.EPSILON) + xi);
+        if (intersects) inside = !inside;
+      }
+      return inside;
+    }
+
+    function polygonCentroid(border) {
+      let area = 0;
+      let cx = 0;
+      let cy = 0;
+
+      for (let i = 0; i < border.length; i++) {
+        const [y1, x1] = border[i];
+        const [y2, x2] = border[(i + 1) % border.length];
+        const factor = x1 * y2 - x2 * y1;
+        area += factor;
+        cx += (x1 + x2) * factor;
+        cy += (y1 + y2) * factor;
+      }
+
+      area /= 2;
+      if (Math.abs(area) < 1e-8) {
+        const sum = border.reduce((acc, [lat, lng]) => ({ lat: acc.lat + lat, lng: acc.lng + lng }), { lat: 0, lng: 0 });
+        return { lat: sum.lat / border.length, lng: sum.lng / border.length };
+      }
+
+      return {
+        lat: cy / (6 * area),
+        lng: cx / (6 * area)
+      };
+    }
+
+    function clampPointToPolygon(lat, lng, polygon) {
+      if (!polygon.length) return { lat, lng };
+      if (pointInPolygon(lat, lng, polygon)) return { lat, lng };
+
+      const center = polygonCentroid(polygon);
+      let currentLat = lat;
+      let currentLng = lng;
+      for (let i = 0; i < 20; i++) {
+        currentLat += (center.lat - currentLat) * 0.25;
+        currentLng += (center.lng - currentLng) * 0.25;
+        if (pointInPolygon(currentLat, currentLng, polygon)) {
+          return { lat: currentLat, lng: currentLng };
+        }
+      }
+      return center;
+    }
+
+    function generateProvincePoints(bounds, count, border) {
+      const patterns = {
+        3: [[0.25, 0.38], [0.70, 0.38], [0.50, 0.72]],
+        4: [[0.28, 0.34], [0.70, 0.34], [0.32, 0.72], [0.68, 0.72]],
+        5: [[0.24, 0.32], [0.70, 0.30], [0.50, 0.50], [0.28, 0.76], [0.72, 0.72]],
+        6: [[0.22, 0.28], [0.50, 0.26], [0.78, 0.34], [0.25, 0.62], [0.54, 0.58], [0.76, 0.74]],
+        7: [[0.20, 0.28], [0.46, 0.24], [0.76, 0.28], [0.26, 0.50], [0.58, 0.50], [0.24, 0.76], [0.74, 0.74]],
+        8: [[0.18, 0.24], [0.42, 0.24], [0.70, 0.26], [0.84, 0.48], [0.58, 0.46], [0.24, 0.54], [0.32, 0.78], [0.74, 0.74]],
+        9: [[0.18, 0.22], [0.42, 0.22], [0.68, 0.22], [0.22, 0.48], [0.50, 0.46], [0.80, 0.46], [0.22, 0.76], [0.52, 0.74], [0.78, 0.74]],
+        10: [[0.16, 0.20], [0.36, 0.20], [0.58, 0.20], [0.80, 0.22], [0.20, 0.46], [0.42, 0.46], [0.66, 0.46], [0.84, 0.50], [0.28, 0.76], [0.72, 0.76]]
+      };
+
+      const layout = patterns[count] || patterns[6];
+      return layout.map(([x, y]) => {
+        const point = {
+          lat: bounds.minLat + bounds.latSpan * y,
+          lng: bounds.minLng + bounds.lngSpan * x
+        };
+        return clampPointToPolygon(point.lat, point.lng, border);
+      });
+    }
+
+    function isPointCoastal(point, borders) {
+      const borderList = Array.isArray(borders[0]?.[0]) ? borders : [borders];
+      return borderList.some((border) => border.some(([lat, lng]) => Math.hypot(lat - point.lat, lng - point.lng) < 1.6));
+    }
+
+    function createCountryFromFeature(feature, index) {
+      const borders = ringsToLatLng(extractOuterRings(feature.geometry));
+      if (!borders.length) return null;
+
+      const primaryBorder = borders.reduce((best, current) => ringArea(current.map(([lat, lng]) => [lng, lat])) > ringArea(best.map(([lat, lng]) => [lng, lat])) ? current : best, borders[0]);
+      if (primaryBorder.length < 3) return null;
+
+      const name = normalizeCountryName(feature);
+      const bounds = getBoundsFromBorder(primaryBorder);
+      const count = determineRegionCount(bounds);
+      const names = regionNames(name, count);
+      const points = generateProvincePoints(bounds, count, primaryBorder);
+      const owner = getStartingOwner(name);
+      const isPlayerHomeland = owner === 'player';
+
+      const country = {
+        id: `country-${index}`,
+        name,
+        borders,
+        primaryBorder,
+        provinces: []
+      };
+
+      for (let i = 0; i < count; i++) {
+        const coastal = isPointCoastal(points[i], borders);
+        const startingTroops = isPlayerHomeland ? 12 + i * 2 : 14 + (i % 4);
+        country.provinces.push({
+          id: `${country.id}-province-${i}`,
+          name: names[i],
+          lat: points[i].lat,
+          lng: points[i].lng,
+          countryId: country.id,
+          owner,
+          nationId: name,
+          nationName: name,
+          nationFlag: getNationFlag(name, owner),
+          troops: startingTroops,
+          spawn: i === 0 || i === Math.floor(count / 2),
+          growth: isPlayerHomeland ? (i === 0 ? 3 : 1) : 2,
+          troopCap: isPlayerHomeland ? 48 : 40,
+          factoryLevel: 0,
+          cityLevel: 0,
+          hasPort: false,
+          coastal
+        });
+      }
+
+      return country;
+    }
+
+    function getProvinceOwnerMajority(country) {
+      const counts = {};
+      for (const province of country.provinces) {
+        counts[province.owner] = (counts[province.owner] || 0) + 1;
+      }
+
+      let bestOwner = 'neutral';
+      let bestCount = -1;
+      for (const [owner, count] of Object.entries(counts)) {
+        if (count > bestCount) {
+          bestOwner = owner;
+          bestCount = count;
+        }
+      }
+      return bestOwner;
+    }
+
+    function getProvinceNationMajority(country) {
+      const counts = {};
+      for (const province of country.provinces) {
+        const key = province.nationId || province.nationName || country.name;
+        counts[key] = (counts[key] || 0) + 1;
+      }
+
+      let bestNation = country.name;
+      let bestCount = -1;
+      for (const [nationId, count] of Object.entries(counts)) {
+        if (count > bestCount) {
+          bestNation = nationId;
+          bestCount = count;
+        }
+      }
+      return bestNation;
+    }
+
+    function getCountryOwner(country) {
+      if (!country || !Array.isArray(country.provinces)) return 'neutral';
+      return getProvinceOwnerMajority(country);
+    }
+
+    function provinceRadius(province) {
+      return province.spawn ? 18 : 12;
+    }
+
+    function calculatePlayerIncome() {
+      return provinces
+        .filter((province) => province.owner === 'player')
+        .reduce((sum, province) => sum + 2 + province.cityLevel * 3 + province.factoryLevel, 0);
+    }
+
+    function getProvinceById(provinceId) {
+      return provinces.find((province) => province.id === provinceId) || null;
+    }
+
+    function getCountryByProvince(province) {
+      return worldCountries.find((country) => country.id === province.countryId) || null;
+    }
+
+    function provinceIconHtml(province, isSelected) {
+      const size = provinceRadius(province) * 2;
+      const border = isSelected ? '3px solid #facc15' : `2px solid ${getNationBorderColor(province.nationId || province.nationName || province.owner)}`;
+      const flag = province.nationFlag || getNationFlag(province.nationName, province.owner);
+      const markers = `${province.factoryLevel > 0 ? '🏭' : ''}${province.cityLevel > 0 ? '🏙️' : ''}${province.hasPort ? '⚓' : ''}`;
+      const usernameTag = province.owner === 'player' ? `<span style="margin-left:3px;font-size:8px;opacity:0.9;">${escapeHtml(playerUsername.slice(0, 6))}</span>` : '';
+      return `<div class="province-token" style="width:${size}px;height:${size}px;background:${getNationColor(province.nationId || province.nationName || province.owner)};border:${border};">${flag}<span style="margin-left:2px;font-size:10px;">${province.troops}</span><span style="margin-left:2px;font-size:9px;">${markers}</span>${usernameTag}</div>`;
+    }
+
+    function isProvinceSelected(province) {
+      return selectedProvinces.some((selected) => selected.id === province.id);
+    }
+
+    function getCountryStrengthByName(countryName) {
+      const country = worldCountries.find((item) => item.name === countryName);
+      if (!country) return 0;
+      return country.provinces.reduce((sum, province) => sum + province.troops + (province.spawn ? 6 : 0), 0);
+    }
+
+    function getThreat(countryName) {
+      return aiThreat.get(countryName) ?? 0;
+    }
+
+    function setThreat(countryName, value) {
+      aiThreat.set(countryName, Math.max(0, Math.min(100, Math.round(value))));
+    }
+
+    function adjustThreat(countryName, delta) {
+      setThreat(countryName, getThreat(countryName) + delta);
+    }
+
+    function getPlayerStrength() {
+      return provinces
+        .filter((province) => province.owner === 'player')
+        .reduce((sum, province) => sum + province.troops + (province.spawn ? 8 : 0) + province.factoryLevel * 6 + province.cityLevel * 4, 0);
+    }
+
+    function getTeamCountries(team) {
+      return worldCountries.filter((country) => getCountryOwner(country) === team);
+    }
+
+    function getCountryNameByProvince(province) {
+      const country = getCountryByProvince(province);
+      return country ? country.name : '';
+    }
+
+    function getAllianceStrength(team) {
+      return provinces
+        .filter((province) => province.owner === team)
+        .reduce((sum, province) => sum + province.troops + (province.spawn ? 5 : 0), 0);
+    }
+
+    function refreshBuildMenu() {
+      const title = document.getElementById('build-menu-title');
+      const subtitle = document.getElementById('build-menu-subtitle');
+      const factoryButton = document.getElementById('build-menu-factory');
+      const cityButton = document.getElementById('build-menu-city');
+      const portButton = document.getElementById('build-menu-port');
+      if (!title || !subtitle || !factoryButton || !cityButton || !portButton) return;
+
+      const province = getProvinceById(buildMenuProvinceId);
+      if (!province || province.owner !== 'player') {
+        title.textContent = 'Build Menu';
+        subtitle.textContent = 'Select one of your provinces to build factories, cities, or ports.';
+        factoryButton.disabled = true;
+        cityButton.disabled = true;
+        portButton.disabled = true;
+        return;
+      }
+
+      title.textContent = province.name;
+      subtitle.textContent = `Troops ${province.troops}/${province.troopCap} • Factory ${province.factoryLevel} • City ${province.cityLevel} • ${province.coastal ? 'Coastal' : 'Inland'}`;
+      factoryButton.disabled = playerGold < FACTORY_COST;
+      cityButton.disabled = playerGold < CITY_COST;
+      portButton.disabled = !province.coastal || province.hasPort || playerGold < PORT_COST;
+    }
+
+    function getAllianceThreshold(countryName, currentOwner) {
+      const base = currentOwner === 'enemy' ? 60 : currentOwner === 'rival' ? 45 : currentOwner === 'rebels' ? 50 : 35;
+      const pressure = Math.max(0, Math.round((getAllianceStrength('player') + getAllianceStrength('ally') - getAllianceStrength(currentOwner)) / 120));
+      return Math.max(20, base - pressure);
+    }
+
+    function getDiplomacyStatus(countryName) {
+      const country = worldCountries.find((item) => item.name === countryName);
+      const owner = getCountryOwner(country);
+      if (owner === 'ally') return 'Allied';
+      if ((allianceCooldowns.get(countryName) || 0) > Date.now()) return 'Cooling down';
+      if (loyalAllianceCountries.has(countryName)) return 'Loyal to current side';
+      if (owner === 'enemy') return 'Hostile';
+      if (owner === 'rival') return 'Unfriendly';
+      if (owner === 'rebels') return 'Chaotic';
+      return 'Open to talks';
+    }
+
+    function refreshDiplomacyMenu() {
+      const title = document.getElementById('diplomacy-title');
+      const subtitle = document.getElementById('diplomacy-subtitle');
+      const relationsEl = document.getElementById('diplomacy-relations');
+      const statusEl = document.getElementById('diplomacy-status');
+      const strengthEl = document.getElementById('diplomacy-strength');
+      const improveBtn = document.getElementById('diplomacy-improve');
+      const allianceBtn = document.getElementById('diplomacy-alliance');
+      if (!title || !subtitle || !relationsEl || !statusEl || !strengthEl || !improveBtn || !allianceBtn) return;
+
+      if (!diplomacyCountryName) {
+        title.textContent = 'Diplomacy';
+        subtitle.textContent = 'Click another country to open diplomacy. Build trust before asking for an alliance.';
+        relationsEl.textContent = '—';
+        statusEl.textContent = '—';
+        strengthEl.textContent = '—';
+        improveBtn.disabled = true;
+        allianceBtn.disabled = true;
+        return;
+      }
+
+      const country = worldCountries.find((item) => item.name === diplomacyCountryName);
+      const owner = getCountryOwner(country);
+      const threshold = getAllianceThreshold(diplomacyCountryName, owner);
+      title.textContent = `${getNationFlag(diplomacyCountryName, owner)} ${diplomacyCountryName}`;
+      subtitle.textContent = `Raise relations above ${threshold} or overpower their current side to secure an alliance.`;
+      relationsEl.textContent = `${getRelations(diplomacyCountryName)} • Threat ${getThreat(diplomacyCountryName)}`;
+      statusEl.textContent = getDiplomacyStatus(diplomacyCountryName);
+      strengthEl.textContent = `${Math.round(getCountryStrengthByName(diplomacyCountryName))}`;
+      improveBtn.disabled = playerGold < 30 || owner === 'ally';
+      allianceBtn.disabled = owner === 'ally';
+    }
+
+    function updateResourceDisplay() {
+      const goldDisplay = document.getElementById('gold-display');
+      const incomeDisplay = document.getElementById('income-display');
+      if (goldDisplay) {
+        goldDisplay.textContent = `💰 Gold: ${Math.floor(playerGold)}`;
+      }
+      if (incomeDisplay) {
+        incomeDisplay.textContent = `📈 Income: ${calculatePlayerIncome()}/tick`;
+      }
+      refreshBuildMenu();
+      refreshDiplomacyMenu();
+    }
+
+    function clearSelection() {
+      selectedProvince = null;
+      selectedProvinces = [];
+      buildMenuProvinceId = '';
+      refreshBuildMenu();
+    }
+
+    function setBuildMenuProvince(province) {
+      buildMenuProvinceId = province && province.owner === 'player' ? province.id : '';
+      refreshBuildMenu();
+    }
+
+    function clearDiplomacySelection() {
+      diplomacyCountryName = '';
+      refreshDiplomacyMenu();
+    }
+
+    function mapPointToContainerPoint(lat, lng) {
+      return map.latLngToContainerPoint([lat, lng]);
+    }
+
+    function getSelectionBounds(start, end) {
+      return {
+        left: Math.min(start.x, end.x),
+        top: Math.min(start.y, end.y),
+        right: Math.max(start.x, end.x),
+        bottom: Math.max(start.y, end.y)
+      };
+    }
+
+    function pointInsideBounds(point, bounds) {
+      return point.x >= bounds.left && point.x <= bounds.right && point.y >= bounds.top && point.y <= bounds.bottom;
+    }
+
+    function getProvincesInSelectionBox(bounds) {
+      return provinces.filter((province) => {
+        const point = mapPointToContainerPoint(province.lat, province.lng);
+        return pointInsideBounds(point, bounds);
+      });
+    }
+
+    function updateSelectionBoxElement(bounds) {
+      const selectionBox = document.getElementById('selection-box');
+      const mapRect = map.getContainer().getBoundingClientRect();
+      selectionBox.style.display = 'block';
+      selectionBox.style.left = `${mapRect.left + bounds.left}px`;
+      selectionBox.style.top = `${mapRect.top + bounds.top}px`;
+      selectionBox.style.width = `${Math.max(1, bounds.right - bounds.left)}px`;
+      selectionBox.style.height = `${Math.max(1, bounds.bottom - bounds.top)}px`;
+    }
+
+    function hideSelectionBoxElement() {
+      const selectionBox = document.getElementById('selection-box');
+      selectionBox.style.display = 'none';
+      selectionBox.style.width = '0px';
+      selectionBox.style.height = '0px';
+    }
+
+    function applySelectionBox(bounds, additive) {
+      const provincesInBox = getProvincesInSelectionBox(bounds);
+      const friendly = provincesInBox.filter((province) => province.owner === 'player' && province.troops >= 2);
+      const nonFriendly = provincesInBox.filter((province) => province.owner !== 'player');
+
+      if (friendly.length) {
+        if (!additive) {
+          selectedProvinces = [];
+        }
+        for (const province of friendly) {
+          if (!selectedProvinces.some((selected) => selected.id === province.id)) {
+            selectedProvinces.push(province);
+          }
+        }
+        selectedProvince = selectedProvinces[0] || null;
+        setBuildMenuProvince(selectedProvinces[0] || null);
+        renderStatic();
+        return;
+      }
+
+      if (nonFriendly.length && selectedProvinces.length) {
+        const target = nonFriendly[0];
+        const sources = selectedProvinces.filter((selected) => selected.owner === 'player' && selected.troops >= 2 && selected.id !== target.id);
+        for (const source of sources) {
+          sendTroops(source, target, sendPercentage);
+        }
+        clearSelection();
+        renderStatic();
+      }
+    }
+
+    function buildCountryLayers() {
+      for (const layer of countryLayers.values()) {
+        map.removeLayer(layer);
+      }
+      countryLayers.clear();
+
+      for (const country of worldCountries) {
+        const nationId = getProvinceNationMajority(country);
+        const layer = L.polygon(country.borders, {
+          color: getNationBorderColor(nationId),
+          weight: 1.5,
+          opacity: 0.95,
+          fillColor: getNationColor(nationId),
+          fillOpacity: 0.18,
+          smoothFactor: 1,
+          interactive: false
+        }).addTo(map);
+        countryLayers.set(country.id, layer);
+      }
+    }
+
+    function buildProvinceLayers() {
+      for (const entry of provinceLayers.values()) {
+        map.removeLayer(entry.marker);
+      }
+      provinceLayers.clear();
+
+      for (const province of provinces) {
+        const radius = provinceRadius(province);
+        const marker = L.marker([province.lat, province.lng], {
+          keyboard: false,
+          icon: L.divIcon({
+            className: '',
+            html: provinceIconHtml(province, isProvinceSelected(province)),
+            iconSize: [radius * 2, radius * 2],
+            iconAnchor: [radius, radius]
+          })
+        }).addTo(map);
+
+        marker.on('click', (event) => {
+          hideCountryContextMenu();
+          onProvinceClick(province, event.originalEvent);
+        });
+
+        marker.on('contextmenu', (event) => {
+          const country = getCountryByProvince(province);
+          if (!country) return;
+          if (event.originalEvent) {
+            event.originalEvent.preventDefault();
+          }
+          showCountryContextMenu(country.name, province.id, event.originalEvent?.clientX || 40, event.originalEvent?.clientY || 40);
+        });
+
+        const country = getCountryByProvince(province);
+        const countryName = country ? country.name : 'Unknown';
+        marker.bindTooltip(`${province.nationFlag || getNationFlag(province.nationName, province.owner)} ${escapeHtml(province.nationName || countryName)} • ${escapeHtml(province.name)} • ${province.troops}${province.owner === 'player' ? ` • ${escapeHtml(playerUsername)}` : ''}`,  {
+          direction: 'top',
+          offset: [0, -8],
+          className: 'province-tooltip',
+          sticky: true
+        });
+
+        provinceLayers.set(province.id, { marker });
+      }
+    }
+
+    function refreshCountryStyles() {
+      for (const country of worldCountries) {
+        const nationId = getProvinceNationMajority(country);
+        const layer = countryLayers.get(country.id);
+        if (!layer) continue;
+        layer.setStyle({
+          color: getNationBorderColor(nationId),
+          fillColor: getNationColor(nationId)
+        });
+      }
+    }
+
+    function refreshProvinceStyles() {
+      for (const province of provinces) {
+        const entry = provinceLayers.get(province.id);
+        if (!entry) continue;
+        const radius = provinceRadius(province);
+        entry.marker.setIcon(L.divIcon({
+          className: '',
+          html: provinceIconHtml(province, isProvinceSelected(province)),
+          iconSize: [radius * 2, radius * 2],
+          iconAnchor: [radius, radius]
+        }));
+        entry.marker.setLatLng([province.lat, province.lng]);
+        const country = getCountryByProvince(province);
+        const countryName = country ? country.name : 'Unknown';
+        entry.marker.setTooltipContent(`${province.nationFlag || getNationFlag(province.nationName, province.owner)} ${escapeHtml(province.nationName || countryName)} • ${escapeHtml(province.name)} • ${province.troops}${province.owner === 'player' ? ` • ${escapeHtml(playerUsername)}` : ''}`);
+      }
+    }
+
+    function clearUnits() {
+      while (unitLayers.length) {
+        map.removeLayer(unitLayers.pop());
+      }
+      while (arrowLayers.length) {
+        map.removeLayer(arrowLayers.pop());
+      }
+    }
+
+    function createArrowSegment(fromLat, fromLng, toLat, toLng) {
+      const dx = toLng - fromLng;
+      const dy = toLat - fromLat;
+      const length = Math.hypot(dx, dy) || 1;
+      const ux = dx / length;
+      const uy = dy / length;
+      const headLength = Math.min(4, Math.max(0.5, length * 0.18));
+      const baseLat = toLat - uy * headLength;
+      const baseLng = toLng - ux * headLength;
+      const perpLat = -ux;
+      const perpLng = uy;
+      const wing = headLength * 0.55;
+
+      return [
+        [baseLat + perpLat * wing, baseLng + perpLng * wing],
+        [toLat, toLng],
+        [baseLat - perpLat * wing, baseLng - perpLng * wing]
+      ];
+    }
+
+    function drawUnits() {
+      clearUnits();
+      for (const unit of units) {
+        const unitColor = getNationColor(unit.nationId || unit.nationName || unit.owner);
+        const line = L.polyline([
+          [unit.fromLat, unit.fromLng],
+          [unit.target.lat, unit.target.lng]
+        ], {
+          color: unitColor,
+          weight: 2,
+          opacity: 0.6,
+          dashArray: unit.seaRoute ? '6,6' : '4,4',
+          interactive: false
+        }).addTo(map);
+        arrowLayers.push(line);
+
+        const arrowHead = L.polyline(createArrowSegment(unit.fromLat, unit.fromLng, unit.target.lat, unit.target.lng), {
+          color: unitColor,
+          weight: 2,
+          opacity: 0.8,
+          interactive: false
+        }).addTo(map);
+        arrowLayers.push(arrowHead);
+
+        const marker = L.circleMarker([unit.lat, unit.lng], {
+          radius: 4,
+          color: '#020617',
+          weight: 1.5,
+          fillColor: unitColor,
+          fillOpacity: 1,
+          interactive: false
+        }).addTo(map);
+        unitLayers.push(marker);
+      }
+    }
+
+    function renderStatic() {
+      refreshCountryStyles();
+      refreshProvinceStyles();
+    }
+
+    function render() {
+      renderStatic();
+      drawUnits();
+    }
+
+    function distance(aLat, aLng, bLat, bLng) {
+      return map.distance([aLat, aLng], [bLat, bLng]);
+    }
+
+    function refreshHelpStatus(message) {
+      const help = document.querySelector('.help');
+      if (help) {
+        help.textContent = message;
+      }
+    }
+
+    function countryCanReceiveAllianceOffer(country) {
+      if (!country) return false;
+      const owner = getCountryOwner(country);
+      return owner !== 'player' && owner !== 'ally';
+    }
+
+    function hideCountryContextMenu() {
+      const menu = document.getElementById('country-context-menu');
+      if (!menu) return;
+      menu.style.display = 'none';
+      contextMenuCountryName = '';
+      contextMenuProvinceId = '';
+    }
+
+    function showCountryContextMenu(countryName, provinceId, x, y) {
+      const menu = document.getElementById('country-context-menu');
+      const title = document.getElementById('country-context-menu-title');
+      const subtitle = document.getElementById('country-context-menu-subtitle');
+      const allyButton = document.getElementById('country-context-menu-ally');
+      const factoryButton = document.getElementById('country-context-menu-factory');
+      const cityButton = document.getElementById('country-context-menu-city');
+      const portButton = document.getElementById('country-context-menu-port');
+      if (!menu || !title || !subtitle || !allyButton || !factoryButton || !cityButton || !portButton) return;
+
+      const province = getProvinceById(provinceId);
+      const canUpgrade = !!province && province.owner === 'player';
+      const country = worldCountries.find((item) => item.name === countryName);
+      const canDiplomacy = !!country && countryCanReceiveAllianceOffer(country);
+
+      contextMenuCountryName = countryName;
+      contextMenuProvinceId = provinceId;
+      title.textContent = `${getNationFlag(countryName, province ? province.owner : 'neutral')} ${countryName}`;
+      subtitle.textContent = canUpgrade
+        ? `Troops ${province.troops}/${province.troopCap} • Factory ${province.factoryLevel} • City ${province.cityLevel} • ${province.coastal ? 'Coastal' : 'Inland'}`
+        : canDiplomacy
+          ? 'Right-click diplomacy menu'
+          : 'No diplomacy actions available';
+
+      allyButton.style.display = canUpgrade ? 'none' : 'block';
+      allyButton.disabled = !canDiplomacy;
+      factoryButton.style.display = canUpgrade ? 'block' : 'none';
+      cityButton.style.display = canUpgrade ? 'block' : 'none';
+      portButton.style.display = canUpgrade && province.coastal ? 'block' : 'none';
+      factoryButton.textContent = `Build Factory (${FACTORY_COST})`;
+      cityButton.textContent = `Build City (${CITY_COST})`;
+      portButton.textContent = province && province.hasPort ? 'Port Built' : `Build Port (${PORT_COST})`;
+      portButton.disabled = !province || province.hasPort;
+      menu.style.display = 'block';
+
+      const menuWidth = 240;
+      const menuHeight = canUpgrade ? 210 : 120;
+      const left = Math.min(window.innerWidth - menuWidth - 12, Math.max(12, x));
+      const top = Math.min(window.innerHeight - menuHeight - 12, Math.max(12, y));
+      menu.style.left = `${left}px`;
+      menu.style.top = `${top}px`;
+    }
+
+    function canUsePortRoute(from, to) {
+      return !!(from.hasPort && from.coastal && to.coastal && distance(from.lat, from.lng, to.lat, to.lng) > LONG_RANGE_PORT_DISTANCE);
+    }
+
+    function sendTroops(from, to, percent = 50) {
+      if (from.id === to.id || from.troops < 2) return false;
+
+      const dist = distance(from.lat, from.lng, to.lat, to.lng);
+      if (dist > LONG_RANGE_PORT_DISTANCE && !canUsePortRoute(from, to)) {
+        refreshHelpStatus('That target is too far. Build a port on a coastal province to launch long-range sea attacks on other coastal provinces.');
+        return false;
+      }
+
+      const normalizedPercent = Math.max(1, Math.min(100, Number(percent) || 50));
+      let amount = Math.floor(from.troops * (normalizedPercent / 100));
+      if (amount >= from.troops) {
+        amount = from.troops - 1;
+      }
+      if (amount < 1) return false;
+
+      from.troops -= amount;
+      const speed = Math.max(0.0025, Math.min(0.05, UNIT_SPEED_METERS_PER_FRAME / Math.max(dist, 1)));
+      const fromCountryName = getCountryNameByProvince(from);
+      const toCountryName = getCountryNameByProvince(to);
+
+      if (from.owner === 'player' && to.owner !== 'player' && toCountryName) {
+        lastPlayerAggressionAt = Date.now();
+        adjustThreat(toCountryName, 14);
+        const defendingOwner = to.owner;
+        const relatedCountries = getTeamCountries(defendingOwner).slice(0, 18);
+        for (const country of relatedCountries) {
+          if (country.name !== toCountryName) {
+            adjustThreat(country.name, 3);
+          }
+        }
+      }
+
+      units.push({
+        fromLat: from.lat,
+        fromLng: from.lng,
+        lat: from.lat,
+        lng: from.lng,
+        owner: from.owner,
+        nationId: from.nationId || from.nationName || fromCountryName,
+        nationName: from.nationName || fromCountryName,
+        nationFlag: from.nationFlag || getNationFlag(from.nationName || fromCountryName, from.owner),
+        fromCountryName,
+        toCountryName,
+        amount,
+        target: to,
+        progress: 0,
+        speed,
+        seaRoute: canUsePortRoute(from, to)
+      });
+      return true;
+    }
+
+    function areTeamsFriendly(a, b) {
+      if (a === b) return true;
+      if (a === 'player' && b === 'ally') return true;
+      if (a === 'ally' && b === 'player') return true;
+      return false;
+    }
+
+    function decideAllianceJoin(countryName, currentOwner, incomingAllianceStrength) {
+      if (loyalAllianceCountries.has(countryName)) {
+        return false;
+      }
+
+      const countryStrength = getCountryStrengthByName(countryName);
+      const currentAllianceStrength = getAllianceStrength(currentOwner);
+      const pressure = incomingAllianceStrength - (currentAllianceStrength + countryStrength * 0.35);
+      const baseChance = currentOwner === 'neutral' ? 0.62 : currentOwner === 'rival' ? 0.52 : 0.34;
+      const scaledChance = Math.max(0.08, Math.min(0.92, baseChance + pressure / 900));
+      const stayLoyalForever = Math.random() < 0.18;
+
+      if (stayLoyalForever) {
+        loyalAllianceCountries.add(countryName);
+        return false;
+      }
+
+      return Math.random() < scaledChance;
+    }
+
+    function convertCountryToTeam(countryName, nextOwner, troopBonus = 0) {
+      const country = worldCountries.find((item) => item.name === countryName);
+      if (!country) return false;
+      for (const province of country.provinces) {
+        province.owner = nextOwner;
+        province.troops = Math.min(province.troopCap, province.troops + troopBonus);
+        province.nationId = country.name;
+        province.nationName = country.name;
+        province.nationFlag = getNationFlag(country.name, nextOwner);
+      }
+      return true;
+    }
+
+    function improveRelations(countryName) {
+      if (!countryName) return false;
+      if (playerGold < 30) {
+        refreshHelpStatus('Not enough gold to improve relations.');
+        return false;
+      }
+      playerGold -= 30;
+      adjustRelations(countryName, 12 + Math.floor(Math.random() * 7));
+      refreshHelpStatus(`${getNationFlag(countryName, 'neutral')} ${countryName} relations improved.`);
+      updateResourceDisplay();
+      return true;
+    }
+
+    function offerAlliance(countryName) {
+      const country = worldCountries.find((item) => item.name === countryName);
+      if (!country) return { accepted: false, reason: 'missing' };
+
+      const currentOwner = getCountryOwner(country);
+      const playerAllianceStrength = getAllianceStrength('player') + getAllianceStrength('ally');
+      const relations = getRelations(countryName);
+      const cooldownUntil = allianceCooldowns.get(countryName) || 0;
+
+      if (areTeamsFriendly(currentOwner, 'player')) {
+        return { accepted: false, reason: 'already-friendly' };
+      }
+      if (cooldownUntil > Date.now()) {
+        return { accepted: false, reason: 'cooldown' };
+      }
+
+      const threshold = getAllianceThreshold(countryName, currentOwner);
+      const acceptedByRelations = relations >= threshold;
+      const acceptedByPressure = decideAllianceJoin(countryName, currentOwner, playerAllianceStrength);
+      const accepted = acceptedByRelations || (relations >= threshold - 10 && acceptedByPressure);
+
+      if (!accepted) {
+        allianceRequests.add(countryName);
+        allianceCooldowns.set(countryName, Date.now() + 25000);
+        adjustRelations(countryName, -6);
+        updateResourceDisplay();
+        return { accepted: false, reason: loyalAllianceCountries.has(countryName) ? 'loyal' : 'rejected' };
+      }
+
+      convertCountryToTeam(countryName, 'ally', 4);
+      allianceRequests.delete(countryName);
+      loyalAllianceCountries.delete(countryName);
+      allianceCooldowns.delete(countryName);
+      setRelations(countryName, 75);
+      updateResourceDisplay();
+      return { accepted: true, reason: 'defected' };
+    }
+
+    function aiAllianceDiplomacy() {
+      const hostileTeams = ['enemy', 'rival', 'rebels'];
+      const candidateCountries = worldCountries
+        .filter((country) => {
+          const owner = getCountryOwner(country);
+          return owner !== 'player' && owner !== 'ally';
+        })
+        .map((country) => country.name);
+      if (!candidateCountries.length) return;
+
+      for (const team of hostileTeams) {
+        if (Math.random() > 0.22) continue;
+        const allianceStrength = getAllianceStrength(team);
+        const candidate = candidateCountries[Math.floor(Math.random() * candidateCountries.length)];
+        if (!candidate) continue;
+        const country = worldCountries.find((item) => item.name === candidate);
+        if (!country) continue;
+        const currentOwner = getCountryOwner(country);
+        if (areTeamsFriendly(currentOwner, team) || currentOwner === 'player' || currentOwner === 'ally') continue;
+
+        const accepted = decideAllianceJoin(candidate, currentOwner, allianceStrength);
+        if (accepted) {
+          convertCountryToTeam(candidate, team, 2);
+          loyalAllianceCountries.delete(candidate);
+          allianceRequests.delete(candidate);
+          setRelations(candidate, team === 'ally' ? 50 : -40);
+        }
+      }
+    }
+
+    function chooseAiTargets(from, possibleTargets) {
+      const fromCountryName = getCountryNameByProvince(from);
+      const playerStrength = getPlayerStrength();
+      const peacefulTime = Date.now() - lastPlayerAggressionAt;
+      const playerRecentlyPeaceful = peacefulTime > 30000;
+
+      return possibleTargets
+        .filter((target) => !areTeamsFriendly(from.owner, target.owner))
+        .map((target) => {
+          const targetCountryName = getCountryNameByProvince(target);
+          const dist = distance(from.lat, from.lng, target.lat, target.lng);
+          const weakTargetBias = target.troops * 45000;
+          let score = dist + weakTargetBias;
+
+          if (target.owner === 'player') {
+            const countryThreat = targetCountryName ? getThreat(targetCountryName) : 0;
+            const powerPressure = Math.max(0, playerStrength - getAllianceStrength(from.owner));
+            const threatWeight = playerRecentlyPeaceful ? countryThreat * 18000 : countryThreat * 32000;
+            const pressureWeight = powerPressure * 120;
+            score -= threatWeight + pressureWeight;
+          } else if (target.owner === 'ally') {
+            score -= 300000;
+          } else {
+            score -= 80000;
+          }
+
+          if (targetCountryName && fromCountryName && targetCountryName === fromCountryName) {
+            score += 999999;
+          }
+
+          return { target, score };
+        })
+        .sort((a, b) => a.score - b.score)
+        .slice(0, 8);
+    }
+
+    function decayThreatOverTime() {
+      const peacefulTime = Date.now() - lastPlayerAggressionAt;
+      const decayAmount = peacefulTime > 45000 ? 3 : peacefulTime > 20000 ? 1 : 0;
+      if (!decayAmount) return;
+      for (const country of worldCountries) {
+        if (country.name !== currentPlayerStartCountry) {
+          adjustThreat(country.name, -decayAmount);
+        }
+      }
+    }
+
+    function enemyAI() {
+      const now = performance.now();
+      if (now - lastAiActionAt < difficultyState.aiAttackInterval) {
+        return;
+      }
+      lastAiActionAt = now;
+      decayThreatOverTime();
+
+      const hostileTeams = ['enemy', 'rival', 'rebels'];
+      for (const attackerTeam of hostileTeams) {
+        const sources = provinces.filter((province) => province.owner === attackerTeam && province.troops >= difficultyState.aiAttackMinTroops);
+        if (!sources.length) continue;
+
+        const actions = Math.max(1, Math.min(3, Math.floor(sources.length / 18) + 1));
+        for (let step = 0; step < actions; step++) {
+          const from = sources[Math.floor(Math.random() * sources.length)];
+          const possibleTargets = provinces.filter((province) => !areTeamsFriendly(attackerTeam, province.owner));
+          if (!possibleTargets.length) continue;
+
+          const rankedTargets = chooseAiTargets(from, possibleTargets);
+          const preferred = rankedTargets[Math.floor(Math.random() * Math.min(3, rankedTargets.length))] || rankedTargets[0];
+          if (!preferred) continue;
+
+          const sendPercent = Math.min(95, Math.max(35, Math.round((48 + Math.random() * 18) * difficultyState.aiSendBonus)));
+          sendTroops(from, preferred.target, sendPercent);
+        }
+      }
+    }
+
+    function allyAI() {
+      const allySources = provinces.filter((province) => province.owner === 'ally' && province.troops >= 8);
+      if (!allySources.length) return;
+      const actionCount = Math.max(1, Math.min(2, Math.floor(allySources.length / 20) + 1));
+      for (let step = 0; step < actionCount; step++) {
+        const from = allySources[Math.floor(Math.random() * allySources.length)];
+        const targets = provinces.filter((province) => province.owner === 'enemy' || province.owner === 'rival' || province.owner === 'rebels');
+        if (!targets.length) return;
+        const ranked = chooseAiTargets({ ...from, owner: 'ally' }, targets);
+        if (ranked[0]) {
+          sendTroops(from, ranked[0].target, 55);
+        }
+      }
+    }
+
+    function growTroops() {
+      playerGold += calculatePlayerIncome();
+      updateResourceDisplay();
+
+      for (const province of provinces) {
+        let bonus = province.spawn ? province.growth : 1;
+        bonus += province.factoryLevel * 2;
+        if (province.owner === 'player') {
+          bonus += difficultyState.playerGrowthBonus;
+        }
+        if (province.owner === 'enemy' || province.owner === 'rival' || province.owner === 'rebels') {
+          bonus += difficultyState.aiGrowthBonus;
+        }
+        if (province.owner === 'ally') {
+          bonus += 1;
+        }
+        province.troops = Math.min(province.troopCap, province.troops + bonus);
+      }
+    }
+
+    function buildProvinceUpgrade(type, province) {
+      if (!province || province.owner !== 'player') return false;
+      if (type === 'factory') {
+        if (playerGold < FACTORY_COST) {
+          refreshHelpStatus('Not enough gold to build a factory.');
+          return false;
+        }
+        playerGold -= FACTORY_COST;
+        province.factoryLevel += 1;
+        refreshHelpStatus(`${province.name} built a factory. Soldier production increased.`);
+      } else if (type === 'city') {
+        if (playerGold < CITY_COST) {
+          refreshHelpStatus('Not enough gold to build a city.');
+          return false;
+        }
+        playerGold -= CITY_COST;
+        province.cityLevel += 1;
+        province.troopCap += 18;
+        refreshHelpStatus(`${province.name} grew into a city. Troop cap increased.`);
+      } else if (type === 'port') {
+        if (!province.coastal) {
+          refreshHelpStatus('Only coastal provinces can build ports.');
+          return false;
+        }
+        if (province.hasPort) {
+          refreshHelpStatus('This province already has a port.');
+          return false;
+        }
+        if (playerGold < PORT_COST) {
+          refreshHelpStatus('Not enough gold to build a port.');
+          return false;
+        }
+        playerGold -= PORT_COST;
+        province.hasPort = true;
+        refreshHelpStatus(`${province.name} built a port. It can now launch sea attacks on coastal provinces.`);
+      } else {
+        return false;
+      }
+      updateResourceDisplay();
+      renderStatic();
+      hideCountryContextMenu();
+      return true;
+    }
+
+    function handleAllianceOffer(countryName) {
+      if (!countryName) return;
+      const result = offerAlliance(countryName);
+      if (result.accepted) {
+        refreshHelpStatus(`${getNationFlag(countryName, 'ally')} ${countryName} joined your alliance and will help you.`);
+      } else if (result.reason === 'loyal') {
+        refreshHelpStatus(`${getNationFlag(countryName, 'neutral')} ${countryName} decided to stay loyal until the end.`);
+      } else if (result.reason === 'already-friendly') {
+        refreshHelpStatus(`${getNationFlag(countryName, 'ally')} ${countryName} is already friendly with your alliance.`);
+      } else if (result.reason === 'cooldown') {
+        refreshHelpStatus(`${getNationFlag(countryName, 'neutral')} ${countryName} needs time before hearing another alliance request.`);
+      } else {
+        refreshHelpStatus(`${getNationFlag(countryName, 'neutral')} ${countryName} refused your alliance offer. Improve relations first.`);
+      }
+      refreshDiplomacyMenu();
+      renderStatic();
+      hideCountryContextMenu();
+    }
+
+    function onProvinceClick(province, originalEvent) {
+      if (gameOver) return;
+
+      const country = getCountryByProvince(province);
+      const multiSelect = !!(originalEvent && originalEvent.shiftKey);
+
+      if (!selectedProvinces.length && province.owner !== 'player' && country && countryCanReceiveAllianceOffer(country)) {
+        diplomacyCountryName = country.name;
+        refreshDiplomacyMenu();
+        refreshHelpStatus(`${getNationFlag(country.name, province.owner)} ${country.name} selected for diplomacy.`);
+        return;
+      }
+
+      if (multiSelect) {
+        if (province.owner !== 'player' || province.troops < 2) return;
+
+        const index = selectedProvinces.findIndex((selected) => selected.id === province.id);
+        if (index >= 0) {
+          selectedProvinces.splice(index, 1);
+        } else {
+          selectedProvinces.push(province);
+        }
+
+        selectedProvince = selectedProvinces[0] || null;
+        setBuildMenuProvince(selectedProvinces[0] || null);
+        renderStatic();
+        return;
+      }
+
+      if (!selectedProvinces.length) {
+        if (province.owner === 'player' && province.troops >= 2) {
+          selectedProvinces = [province];
+          selectedProvince = province;
+          setBuildMenuProvince(province);
+          renderStatic();
+        }
+        return;
+      }
+
+      const clickedSelected = selectedProvinces.some((selected) => selected.id === province.id);
+      if (clickedSelected && selectedProvinces.length === 1) {
+        clearSelection();
+        renderStatic();
+        return;
+      }
+
+      const sources = selectedProvinces.filter((selected) => selected.owner === 'player' && selected.troops >= 2 && selected.id !== province.id);
+      if (!sources.length) {
+        clearSelection();
+        renderStatic();
+        return;
+      }
+
+      for (const source of sources) {
+        sendTroops(source, province, sendPercentage);
+      }
+
+      clearSelection();
+      renderStatic();
+    }
+
+    function updateUnits() {
+      for (let i = units.length - 1; i >= 0; i--) {
+        const unit = units[i];
+        unit.progress = Math.min(1, unit.progress + unit.speed);
+        unit.lat = unit.fromLat + (unit.target.lat - unit.fromLat) * unit.progress;
+        unit.lng = unit.fromLng + (unit.target.lng - unit.fromLng) * unit.progress;
+        if (unit.progress >= 1) {
+          const target = unit.target;
+          if (target.owner === unit.owner) {
+            target.troops = Math.min(target.troopCap, target.troops + unit.amount);
+          } else {
+            target.troops -= unit.amount;
+            if (target.troops < 0) {
+              target.owner = unit.owner;
+              target.nationId = unit.nationId || unit.nationName || unit.owner;
+              target.nationName = unit.nationName || unit.nationId || unit.owner;
+              target.nationFlag = unit.nationFlag || getNationFlag(target.nationName, target.owner);
+              target.troops = Math.min(target.troopCap, Math.abs(target.troops));
+            }
+          }
+          units.splice(i, 1);
+        }
+      }
+    }
+
+    function checkWin() {
+      if (gameOver || !worldReady) return;
+
+      const playerHas = provinces.some((province) => province.owner === 'player');
+      const hostileHas = provinces.some((province) => ['enemy', 'rival', 'rebels'].includes(province.owner));
+
+      if (!playerHas) {
+        gameOver = true;
+        alert('You lost the world war. Refresh to play again.');
+        window.location.reload();
+        return;
+      }
+
+      if (!hostileHas) {
+        gameOver = true;
+        alert('You won the world war. Refresh to play again.');
+        window.location.reload();
+      }
+    }
+
+    function runTests() {
+      console.assert(determineRegionCount({ latSpan: 1, lngSpan: 1 }) === 3, 'Small countries should get 3 regions');
+      console.assert(determineRegionCount({ latSpan: 3, lngSpan: 3 }) === 4, 'Medium countries should get 4 regions');
+      console.assert(determineRegionCount({ latSpan: 5, lngSpan: 4 }) === 5, 'Larger countries should get 5 regions');
+      console.assert(teamLabel('player') === 'Player', 'Player label should resolve correctly');
+      console.assert(getColor('enemy') === '#ef4444', 'Enemy color should resolve correctly');
+      console.assert(escapeHtml('<x>') === '&lt;x&gt;', 'HTML escaping should work');
+      console.assert(DIFFICULTY_CONFIG.brutal.aiGrowthBonus > DIFFICULTY_CONFIG.easy.aiGrowthBonus, 'Harder difficulties should buff AI growth');
+
+      const square = [[0, 0], [0, 2], [2, 2], [2, 0]];
+      console.assert(pointInPolygon(1, 1, square) === true, 'Point should be inside polygon');
+      console.assert(pointInPolygon(3, 3, square) === false, 'Point should be outside polygon');
+
+      const generated = generateProvincePoints({ minLat: 10, minLng: 20, latSpan: 4, lngSpan: 6 }, 5, [[10, 20], [10, 26], [14, 26], [14, 20]]);
+      console.assert(generated.length === 5, 'Province point generation should return correct number of points');
+      console.assert(generated.every((point) => pointInPolygon(point.lat, point.lng, [[10, 20], [10, 26], [14, 26], [14, 20]])), 'Generated points should stay inside polygon');
+
+      const feature = {
+        properties: { ADMIN: 'Testland' },
+        geometry: { type: 'Polygon', coordinates: [[[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]]] }
+      };
+      currentStartingFactions = buildStartingFactions();
+      currentStartingFactions.player = ['Testland'];
+      const generatedCountry = createCountryFromFeature(feature, 1);
+      console.assert(generatedCountry !== null, 'Country should be created from valid GeoJSON feature');
+      console.assert(Array.isArray(generatedCountry.borders) && generatedCountry.borders.length >= 1, 'Country should preserve full border rings');
+      console.assert(generatedCountry.provinces.length >= 3, 'Generated country should have regions');
+      console.assert(generatedCountry.provinces.every((province) => province.owner === 'player'), 'Homeland should fully belong to player');
+
+      currentStartingFactions = buildStartingFactions();
+      balancedAiAssignments = new Map([['enemyland', 'enemy']]);
+      const enemyFeature = {
+        properties: { ADMIN: 'Enemyland' },
+        geometry: { type: 'Polygon', coordinates: [[[0, 0], [3, 0], [3, 3], [0, 3], [0, 0]]] }
+      };
+      const enemyCountry = createCountryFromFeature(enemyFeature, 2);
+      console.assert(enemyCountry.provinces.every((province) => province.owner === 'enemy'), 'AI countries should fully belong to one AI owner');
+
+      const iconHtml = provinceIconHtml({ owner: 'player', troops: 12, spawn: true, factoryLevel: 0, cityLevel: 0, hasPort: false, countryId: 'missing', nationId: 'Poland', nationName: 'Poland', nationFlag: '🇵🇱' }, true);
+      console.assert(iconHtml.includes('12'), 'Province icon should include troop count');
+      console.assert(iconHtml.includes('🇵🇱'), 'Province icon should include nation flag');
+      console.assert(iconHtml.includes('#facc15'), 'Selected province icon should include selected border');
+
+      worldCountries = [{ name: 'Poland', id: 'country-1', provinces: [] }, { name: 'Germany', id: 'country-2', provinces: [] }];
+      const attackFrom = { id: 'a', lat: 0, lng: 0, troops: 10, owner: 'player', hasPort: false, coastal: false, nationId: 'Poland', nationName: 'Poland', nationFlag: '🇵🇱', countryId: 'country-1' };
+      const attackTo = { id: 'b', lat: 0, lng: 1, troops: 5, owner: 'enemy', troopCap: 40, coastal: false, nationId: 'Germany', nationName: 'Germany', nationFlag: '🇩🇪', countryId: 'country-2' };
+      const beforeUnits = units.length;
+      const sent = sendTroops(attackFrom, attackTo, 50);
+      console.assert(sent === true, 'Troops should be sent when source has enough units');
+      console.assert(attackFrom.troops === 5, 'Sending 50 percent should reduce source troops by half');
+
+      const attackFromAll = { id: 'c', lat: 0, lng: 0, troops: 10, owner: 'player', hasPort: false, coastal: false, nationId: 'Poland', nationName: 'Poland', nationFlag: '🇵🇱', countryId: 'country-1' };
+      const attackToAll = { id: 'd', lat: 0, lng: 1, troops: 5, owner: 'enemy', troopCap: 40, coastal: false, nationId: 'Germany', nationName: 'Germany', nationFlag: '🇩🇪', countryId: 'country-2' };
+      const sentAll = sendTroops(attackFromAll, attackToAll, 100);
+      console.assert(sentAll === true, 'Troops should still send at 100 percent');
+      console.assert(attackFromAll.troops === 1, 'Sending 100 percent should leave at least one troop behind');
+
+      selectedProvinces = [attackFrom, attackToAll];
+      console.assert(isProvinceSelected(attackFrom) === true, 'Selected province lookup should work');
+      console.assert(isProvinceSelected(attackTo) === false, 'Unselected province lookup should work');
+      clearSelection();
+      console.assert(selectedProvinces.length === 0, 'Clear selection should empty multi selection');
+      console.assert(selectedProvince === null, 'Clear selection should reset single selection');
+
+      const arrow = createArrowSegment(0, 0, 0, 10);
+      console.assert(Array.isArray(arrow) && arrow.length === 3, 'Arrow segment should have three points');
+
+      const bounds = getSelectionBounds({ x: 40, y: 80 }, { x: 10, y: 20 });
+      console.assert(bounds.left === 10 && bounds.top === 20 && bounds.right === 40 && bounds.bottom === 80, 'Selection bounds should normalize drag direction');
+      console.assert(pointInsideBounds({ x: 20, y: 30 }, bounds) === true, 'Point inside selection bounds should return true');
+      console.assert(pointInsideBounds({ x: 50, y: 30 }, bounds) === false, 'Point outside selection bounds should return false');
+
+      console.assert(typeof updateSendPercentageDisplay === 'function', 'Slider display updater should exist');
+      console.assert(buildStartingFactions().enemy.length > BASE_STARTING_FACTIONS.enemy.length, 'Difficulty setup should add more AI countries');
+      console.assert(BASE_STARTING_FACTIONS.player.length === 0, 'Base player homeland should be assigned dynamically');
+      const balancedAssignmentsTest = buildBalancedAiAssignments([
+        { properties: { ADMIN: 'Alpha' }, geometry: { type: 'Polygon', coordinates: [[[0,0],[2,0],[2,2],[0,2],[0,0]]] } },
+        { properties: { ADMIN: 'Beta' }, geometry: { type: 'Polygon', coordinates: [[[0,0],[3,0],[3,3],[0,3],[0,0]]] } }
+      ], buildStartingFactions(), 'Alpha');
+      console.assert(balancedAssignmentsTest.has('beta'), 'Unlisted countries should still get an AI owner');
+      console.assert(typeof chooseRandomPlayerStart([{ properties: { ADMIN: 'A' } }, { properties: { ADMIN: 'B' } }]) === 'string', 'Random start chooser should return a country name');
+
+      const multiFeature = {
+        properties: { ADMIN: 'Islandia' },
+        geometry: { type: 'MultiPolygon', coordinates: [
+          [[[0,0],[1,0],[1,1],[0,1],[0,0]]],
+          [[[3,3],[4,3],[4,4],[3,4],[3,3]]]
+        ] }
+      };
+      const multiCountry = createCountryFromFeature(multiFeature, 2);
+      console.assert(multiCountry && multiCountry.borders.length === 2, 'MultiPolygon countries should keep all outer areas');
+
+      worldCountries = [{ name: 'Testland', id: 'test-0', provinces: [{ owner: 'rival', troops: 12, spawn: true, troopCap: 40 }, { owner: 'rival', troops: 9, spawn: false, troopCap: 40 }] }];
+      provinces = worldCountries.flatMap((country, countryIndex) => country.provinces.map((province, provinceIndex) => ({ ...province, id: `p-${countryIndex}-${provinceIndex}`, countryId: country.id, lat: provinceIndex, lng: provinceIndex })));
+      loyalAllianceCountries.clear();
+      setRelations('Testland', 55);
+      const allianceResult = offerAlliance('Testland');
+      console.assert(typeof allianceResult.accepted === 'boolean', 'Alliance offer should return an object with a boolean result');
+      console.assert(typeof decideAllianceJoin('Testland', 'rival', 100) === 'boolean', 'Alliance decision should return a boolean');
+      console.assert(countryCanReceiveAllianceOffer({ provinces: [{ owner: 'enemy' }] }) === true, 'Enemy countries should allow alliance offers');
+      console.assert(countryCanReceiveAllianceOffer({ provinces: [{ owner: 'ally' }] }) === false, 'Friendly countries should not need alliance offers');
+      console.assert(getRelations('Testland') >= -100 && getRelations('Testland') <= 100, 'Relations should stay clamped');
+      console.assert(getAllianceThreshold('Testland', 'rival') >= 20, 'Alliance threshold should be computed');
+      setThreat('Testland', 40);
+      adjustThreat('Testland', -5);
+      console.assert(getThreat('Testland') === 35, 'Threat should update and clamp correctly');
+
+      const econProvince = { owner: 'player', name: 'Core', troopCap: 40, factoryLevel: 0, cityLevel: 0, hasPort: false, coastal: true };
+      playerGold = 500;
+      console.assert(buildProvinceUpgrade('factory', econProvince) === true, 'Factory upgrade should succeed with enough gold');
+      console.assert(econProvince.factoryLevel === 1, 'Factory upgrade should increase factory level');
+      console.assert(buildProvinceUpgrade('city', econProvince) === true, 'City upgrade should succeed with enough gold');
+      console.assert(econProvince.troopCap > 40, 'City upgrade should raise troop cap');
+      console.assert(buildProvinceUpgrade('port', econProvince) === true, 'Port upgrade should succeed on coastal province');
+      console.assert(econProvince.hasPort === true, 'Port upgrade should flag coastal port');
+
+      const fakeUnit = { nationId: 'Poland', nationName: 'Poland', owner: 'player', seaRoute: false, fromLat: 0, fromLng: 0, target: { lat: 0, lng: 1 }, lat: 0, lng: 0 };
+      console.assert(typeof getNationColor(fakeUnit.nationId) === 'string', 'Nation color should resolve');
+
+      units.splice(beforeUnits);
+    }
+
+    async function fetchWorldFeatures() {
+      const response = await fetch(COUNTRY_GEOJSON_URL);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const geojson = await response.json();
+      return Array.isArray(geojson.features) ? geojson.features : [];
+    }
+
+    async function loadWorld() {
+      const help = document.querySelector('.help');
+      help.textContent = 'Loading all countries and generating world regions...';
+      currentStartingFactions = buildStartingFactions();
+      lastAiActionAt = 0;
+      clearSelection();
+      clearDiplomacySelection();
+      hideCountryContextMenu();
+      balancedAiAssignments = new Map();
+      allianceRequests = new Set();
+      loyalAllianceCountries = new Set();
+      playerGold = 140;
+
+      try {
+        let features;
+        try {
+          features = await fetchWorldFeatures();
+        } catch (error) {
+          console.error(error);
+          features = FALLBACK_FEATURES;
+        }
+
+        const randomStartCountry = chooseRandomPlayerStart(features);
+        currentStartingFactions.player = [randomStartCountry];
+        currentPlayerStartCountry = randomStartCountry;
+        balancedAiAssignments = buildBalancedAiAssignments(features, currentStartingFactions, randomStartCountry);
+        initializeDiplomacy(features, randomStartCountry);
+
+        worldCountries = features
+          .map((feature, index) => createCountryFromFeature(feature, index))
+          .filter(Boolean)
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        provinces = worldCountries.flatMap((country) => country.provinces);
+
+        buildCountryLayers();
+        buildProvinceLayers();
+        render();
+        worldReady = true;
+
+        const usingFallback = features === FALLBACK_FEATURES;
+        help.textContent = usingFallback
+          ? `Loaded ${worldCountries.length} fallback countries • ${selectedDifficulty} difficulty • all countries have AI • start as ${currentPlayerStartCountry}.`
+          : `Loaded ${worldCountries.length} countries • ${selectedDifficulty} difficulty • all countries have AI • start as ${currentPlayerStartCountry}.`;
+        updateResourceDisplay();
+        refreshHelpStatus(help.textContent);
+      } catch (error) {
+        console.error(error);
+        help.textContent = 'Failed to load the world country dataset.';
+      }
+    }
+
+    function gameLoop() {
+      if (gameStarted && worldReady && !gameOver) {
+        updateUnits();
+        drawUnits();
+        checkWin();
+      }
+      requestAnimationFrame(gameLoop);
+    }
+
+    map.on('zoomend', () => {
+      if (worldReady) {
+        renderStatic();
+      }
+    });
+
+    map.on('movestart', () => {
+      hideCountryContextMenu();
+      if (boxSelectState) {
+        hideSelectionBoxElement();
+        boxSelectState = null;
+        map.dragging.enable();
+      }
+    });
+
+    map.getContainer().addEventListener('pointerdown', (event) => {
+      if (!worldReady || gameOver) return;
+      if (event.button !== 0) return;
+      if (event.target.closest('.leaflet-marker-icon')) return;
+      if (event.target.closest('.leaflet-control-container')) return;
+
+      const containerRect = map.getContainer().getBoundingClientRect();
+      const startPoint = {
+        x: event.clientX - containerRect.left,
+        y: event.clientY - containerRect.top
+      };
+
+      boxSelectState = {
+        pointerId: event.pointerId,
+        startPoint,
+        currentPoint: startPoint,
+        additive: event.shiftKey,
+        dragging: false
+      };
+
+      map.dragging.disable();
+      hideSelectionBoxElement();
+      if (map.getContainer().setPointerCapture) {
+        map.getContainer().setPointerCapture(event.pointerId);
+      }
+    });
+
+    map.getContainer().addEventListener('pointermove', (event) => {
+      if (!boxSelectState || boxSelectState.pointerId !== event.pointerId) return;
+
+      const containerRect = map.getContainer().getBoundingClientRect();
+      boxSelectState.currentPoint = {
+        x: event.clientX - containerRect.left,
+        y: event.clientY - containerRect.top
+      };
+
+      const bounds = getSelectionBounds(boxSelectState.startPoint, boxSelectState.currentPoint);
+      const width = bounds.right - bounds.left;
+      const height = bounds.bottom - bounds.top;
+      boxSelectState.dragging = width > 6 || height > 6;
+
+      if (boxSelectState.dragging) {
+        updateSelectionBoxElement(bounds);
+      }
+    });
+
+    function finishBoxSelection(event) {
+      if (!boxSelectState || boxSelectState.pointerId !== event.pointerId) return;
+
+      const state = boxSelectState;
+      boxSelectState = null;
+      hideSelectionBoxElement();
+      map.dragging.enable();
+
+      try {
+        if (map.getContainer().releasePointerCapture) {
+          map.getContainer().releasePointerCapture(event.pointerId);
+        }
+      } catch (error) {
+      }
+
+      if (!state.dragging) return;
+
+      const bounds = getSelectionBounds(state.startPoint, state.currentPoint);
+      applySelectionBox(bounds, state.additive);
+    }
+
+    map.getContainer().addEventListener('pointerup', finishBoxSelection);
+    map.getContainer().addEventListener('pointercancel', finishBoxSelection);
+
+    setInterval(() => {
+      if (!worldReady || gameOver) return;
+      growTroops();
+      renderStatic();
+    }, GROWTH_TIME);
+
+    setInterval(() => {
+      if (!worldReady || gameOver) return;
+      enemyAI();
+      allyAI();
+      aiAllianceDiplomacy();
+      renderStatic();
+    }, AI_TIME);
+
+    const sendPercentInput = document.getElementById('send-percent');
+    const difficultySelect = document.getElementById('difficulty-select');
+    const contextMenuAllyButton = document.getElementById('country-context-menu-ally');
+    const contextMenuFactoryButton = document.getElementById('country-context-menu-factory');
+    const contextMenuCityButton = document.getElementById('country-context-menu-city');
+    const contextMenuPortButton = document.getElementById('country-context-menu-port');
+    const buildMenuFactoryButton = document.getElementById('build-menu-factory');
+    const buildMenuCityButton = document.getElementById('build-menu-city');
+    const buildMenuPortButton = document.getElementById('build-menu-port');
+    const diplomacyImproveButton = document.getElementById('diplomacy-improve');
+    const diplomacyAllianceButton = document.getElementById('diplomacy-alliance');
+    const startSinglePlayerButton = document.getElementById('start-singleplayer-button');
+    const backToMenuButton = document.getElementById('back-to-menu-button');
+    
+    
+    
+    const usernameInput = document.getElementById('username-input');
+
+    sendPercentInput.addEventListener('input', (event) => {
+      sendPercentage = Number(event.target.value);
+      updateSendPercentageDisplay();
+    });
+
+    difficultySelect.addEventListener('change', async (event) => {
+      selectedDifficulty = event.target.value;
+      difficultyState = DIFFICULTY_CONFIG[selectedDifficulty];
+      gameOver = false;
+      clearSelection();
+      clearDiplomacySelection();
+      units.length = 0;
+      clearUnits();
+      worldReady = false;
+      await loadWorld();
+    });
+
+    contextMenuAllyButton.addEventListener('click', () => {
+      handleAllianceOffer(contextMenuCountryName);
+    });
+
+    contextMenuFactoryButton.addEventListener('click', () => {
+      buildProvinceUpgrade('factory', getProvinceById(contextMenuProvinceId));
+    });
+
+    contextMenuCityButton.addEventListener('click', () => {
+      buildProvinceUpgrade('city', getProvinceById(contextMenuProvinceId));
+    });
+
+    contextMenuPortButton.addEventListener('click', () => {
+      buildProvinceUpgrade('port', getProvinceById(contextMenuProvinceId));
+    });
+
+    buildMenuFactoryButton.addEventListener('click', () => {
+      buildProvinceUpgrade('factory', getProvinceById(buildMenuProvinceId));
+    });
+
+    buildMenuCityButton.addEventListener('click', () => {
+      buildProvinceUpgrade('city', getProvinceById(buildMenuProvinceId));
+    });
+
+    buildMenuPortButton.addEventListener('click', () => {
+      buildProvinceUpgrade('port', getProvinceById(buildMenuProvinceId));
+    });
+
+    diplomacyImproveButton.addEventListener('click', () => {
+      improveRelations(diplomacyCountryName);
+    });
+
+    diplomacyAllianceButton.addEventListener('click', () => {
+      handleAllianceOffer(diplomacyCountryName);
+    });
+
+    startSinglePlayerButton.addEventListener('click', async () => {
+      await startSinglePlayerGame();
+    });
+
+    usernameInput.addEventListener('input', () => {
+      playerUsername = sanitizeUsername(usernameInput.value);
+      updateUsernameBadge();
+    });
+
+    backToMenuButton.addEventListener('click', () => {
+      exitToMenu();
+    });
+
+    
+
+    
+
+    
+
+    document.addEventListener('click', (event) => {
+      if (!event.target.closest('#country-context-menu') && !event.target.closest('.leaflet-marker-icon')) {
+        hideCountryContextMenu();
+      }
+    });
+
+    document.addEventListener('contextmenu', (event) => {
+      if (!event.target.closest('.leaflet-marker-icon')) {
+        hideCountryContextMenu();
+      }
+    });
+
+    function resizeMapView() {
+      const mapElement = document.getElementById('map');
+      mapElement.style.width = `${window.innerWidth}px`;
+      mapElement.style.height = `${window.innerHeight}px`;
+      map.invalidateSize();
+    }
+
+    window.addEventListener('resize', resizeMapView);
+
+    difficultyState = DIFFICULTY_CONFIG[selectedDifficulty];
+    updateSendPercentageDisplay();
+    updateResourceDisplay();
+    resizeMapView();
+    runTests();
+    console.assert(sanitizeUsername('   Boss   ') === 'Boss', 'Username sanitizer should trim spaces');
+    console.assert(sanitizeUsername('') === 'Player 1', 'Username sanitizer should provide a default');
+    setStartMenuStatus('Choose Single Player to start now, or open the lobby browser menu. Set your username before starting.');
+    updateUsernameBadge();
+    gameLoop();
+  </script>
+</body>
+</html>
